@@ -1,0 +1,681 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Class {
+  id           Int           @id @default(autoincrement())
+  display_name String
+  created_by   Int?
+  created_at   DateTime      @default(now())
+  batches      CourseBatch[]
+}
+
+model Section {
+  id           Int           @id @default(autoincrement())
+  display_name String
+  created_by   Int?
+  created_at   DateTime      @default(now())
+  batches      CourseBatch[]
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  password   String
+  name       String
+  role       String   @default("admin") // admin, teacher, student, parent
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  teacher Teacher?
+}
+
+model Student {
+  id            Int      @id @default(autoincrement())
+  name          String
+  phone         String   @unique
+  email         String   @unique
+  date_of_birth DateTime?
+  father_name   String?
+  mother_name   String?
+  created_by    Int?
+  is_deleted    Boolean  @default(false)
+  created_at    DateTime @default(now())
+
+  enrollments        StudentEnrollment[]
+  batch_students     BatchStudent[]
+  attendance         Attendance[]
+  broadcast_messages BroadcastMessage[]
+  paperAttempts      PaperAttempt[]
+  paperResults       PaperResult[]
+  examResults        ExamAggregateResult[]
+  accessTokens       StudentExamAccessToken[]
+}
+
+model Teacher {
+  id         Int      @id @default(autoincrement())
+  name       String
+  phone      String   @unique
+  email      String   @unique
+  created_by Int?
+  is_deleted Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user_id Int?  @unique
+  user    User? @relation(fields: [user_id], references: [id])
+
+  lectures       Lecture[]
+  batch_teachers BatchTeacher[]
+  payouts        TeacherPayout[]
+  examPapers     ExamPaper[]
+  evaluations    AnswerEvaluation[]
+}
+
+model Subject {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  created_by  Int?
+  is_deleted  Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  course_subjects CourseSubject[]
+  lectures        Lecture[]
+  examPapers      ExamPaper[]
+}
+
+model Course {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String?
+  duration_days Int?
+  class         String?
+  sem           String?
+  stream        String?
+  year          String?
+  semester      String?
+  education     String?
+  created_by    Int?
+  is_deleted    Boolean  @default(false)
+  created_at    DateTime @default(now())
+
+  batches         CourseBatch[]
+  course_subjects CourseSubject[]
+  enrollments     StudentEnrollment[]
+}
+
+model CourseSubject {
+  id         Int @id @default(autoincrement())
+  course_id  Int
+  subject_id Int
+
+  course  Course  @relation(fields: [course_id], references: [id])
+  subject Subject @relation(fields: [subject_id], references: [id])
+
+  @@unique([course_id, subject_id])
+}
+
+model CourseBatch {
+  id                        Int      @id @default(autoincrement())
+  course_id                 Int
+  class_id                  Int // Added
+  section_id                Int // Added
+  title                     String
+  description               String?
+  duration_days             Int
+  start_date                DateTime
+  end_date                  DateTime
+  total_revenue             Float    @default(0)
+  teacher_share_percent     Float    @default(0)
+  institution_share_percent Float    @default(0)
+  created_by                Int?
+  is_completed              Boolean  @default(false)
+  is_deleted                Boolean  @default(false)
+  created_at                DateTime @default(now())
+
+  course            Course                          @relation(fields: [course_id], references: [id])
+  class             Class                           @relation(fields: [class_id], references: [id])
+  section           Section                         @relation(fields: [section_id], references: [id])
+  lectures          Lecture[]
+  batch_teachers    BatchTeacher[]
+  batch_students    BatchStudent[]
+  enrollments       StudentEnrollment[]
+  exams             Exam[]
+  reportCardConfigs BatchReportCardTemplateConfig[]
+}
+
+model BatchTeacher {
+  id           Int    @id @default(autoincrement())
+  batch_id     Int
+  teacher_id   Int
+  share_amount Float? // Manual override for calculated share
+
+  batch   CourseBatch @relation(fields: [batch_id], references: [id])
+  teacher Teacher     @relation(fields: [teacher_id], references: [id])
+
+  @@unique([batch_id, teacher_id])
+}
+
+model BatchStudent {
+  id         Int @id @default(autoincrement())
+  batch_id   Int
+  student_id Int
+
+  batch   CourseBatch @relation(fields: [batch_id], references: [id])
+  student Student     @relation(fields: [student_id], references: [id])
+
+  @@unique([batch_id, student_id])
+}
+
+model Lecture {
+  id               Int      @id @default(autoincrement())
+  batch_id         Int
+  teacher_id       Int
+  subject_id       Int
+  date_time        DateTime
+  duration_minutes Int
+  topic            String
+  created_by       Int?
+  created_at       DateTime @default(now())
+
+  batch      CourseBatch  @relation(fields: [batch_id], references: [id])
+  teacher    Teacher      @relation(fields: [teacher_id], references: [id])
+  subject    Subject      @relation(fields: [subject_id], references: [id])
+  attendance Attendance[]
+}
+
+model Attendance {
+  id         Int      @id @default(autoincrement())
+  lecture_id Int
+  student_id Int
+  status     String // "present" | "absent" | "late" | "excused"
+  notes      String?
+  date       DateTime @default(now()) // Added date
+  created_at DateTime @default(now())
+
+  lecture Lecture @relation(fields: [lecture_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@unique([lecture_id, student_id])
+}
+
+model StudentEnrollment {
+  id                Int      @id @default(autoincrement())
+  student_id        Int
+  batch_id          Int
+  course_id         Int
+  course_fee        Float
+  registration_fee  Float
+  discount          Float
+  total_amount      Float
+  enrollment_status String
+  payment_status    String
+  notes             String?
+  created_by        Int?
+  created_at        DateTime @default(now())
+
+  student  Student          @relation(fields: [student_id], references: [id])
+  batch    CourseBatch      @relation(fields: [batch_id], references: [id])
+  course   Course           @relation(fields: [course_id], references: [id])
+  payments PaidStudentFee[]
+
+  @@unique([student_id, batch_id])
+}
+
+model PaidStudentFee {
+  id             Int      @id @default(autoincrement())
+  enrollment_id  Int
+  amount         Float
+  pay_type       String
+  pay_mode       String
+  upi_id         String?
+  ac_number      String?
+  transaction_id String?
+  notes          String?
+  created_by     Int?
+  created_at     DateTime @default(now())
+
+  enrollment StudentEnrollment @relation(fields: [enrollment_id], references: [id])
+}
+
+model TeacherPayout {
+  id            Int       @id @default(autoincrement())
+  batch_id      Int
+  teacher_id    Int
+  payout_amount Float
+  payout_cycle  String
+  status        String
+  payout_date   DateTime?
+  created_at    DateTime  @default(now()) // Added for tracking
+
+  teacher Teacher @relation(fields: [teacher_id], references: [id])
+}
+
+// --- SCHOOL MODE EXAM MODULE MODELS ---
+
+enum ExamStatus {
+  DRAFT
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  REVIEWING
+  PUBLISHED
+}
+
+enum PaperStatus {
+  DRAFT
+  SCHEDULED
+  OPEN
+  CLOSED
+  EVALUATING
+  FINALIZED
+}
+
+enum QuestionType {
+  MCQ
+  DESCRIPTIVE
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  LOCKED
+}
+
+enum GradeLetter {
+  A
+  B
+  C
+  D
+  E
+  F
+}
+
+model ExamType {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique // MIDTERM, FINAL, UNIT_TEST
+  display_name String
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+
+  exams Exam[]
+}
+
+model Exam {
+  id                Int        @id @default(autoincrement())
+  batch_id          Int
+  exam_type_id      Int
+  grading_scheme_id Int
+  title             String
+  academic_session  String // "2025-26"
+  status            ExamStatus // DRAFT, SCHEDULED, ONGOING, COMPLETED, REVIEWING, PUBLISHED
+  is_active         Boolean    @default(true)
+  created_by        Int?
+  created_at        DateTime   @default(now())
+
+  batch             CourseBatch           @relation(fields: [batch_id], references: [id])
+  exam_type         ExamType              @relation(fields: [exam_type_id], references: [id])
+  grading_scheme    GradingScheme         @relation(fields: [grading_scheme_id], references: [id])
+  papers            ExamPaper[]
+  passing_rule      ExamPassingRule?
+  aggregate_results ExamAggregateResult[]
+  publish_info      ExamPublish?
+
+  @@index([batch_id, academic_session, exam_type_id])
+}
+
+model ExamPaper {
+  id               Int         @id @default(autoincrement())
+  exam_id          Int
+  subject_id       Int
+  teacher_id       Int
+  title            String
+  total_marks      Float
+  start_at         DateTime
+  end_at           DateTime
+  duration_minutes Int
+  status           PaperStatus // DRAFT, SCHEDULED, OPEN, CLOSED, EVALUATING, FINALIZED
+  mode             ExamMode    @default(ONLINE)
+  is_active        Boolean     @default(true)
+  created_at       DateTime    @default(now())
+
+  exam         Exam                     @relation(fields: [exam_id], references: [id])
+  subject      Subject                  @relation(fields: [subject_id], references: [id])
+  teacher      Teacher                  @relation(fields: [teacher_id], references: [id])
+  questions    ExamQuestion[]
+  attempts     PaperAttempt[]
+  passing_rule PaperPassingRule?
+  results      PaperResult[]
+  accessTokens StudentExamAccessToken[]
+
+  @@unique([exam_id, subject_id])
+  @@index([exam_id, start_at])
+  @@index([teacher_id, status])
+  @@index([subject_id])
+}
+
+model ExamQuestion {
+  id            Int          @id @default(autoincrement())
+  paper_id      Int
+  type          QuestionType // MCQ or DESCRIPTIVE
+  question_text String
+  marks         Float
+  display_order Int
+  is_active     Boolean      @default(true)
+  created_at    DateTime     @default(now())
+
+  paper   ExamPaper            @relation(fields: [paper_id], references: [id])
+  options ExamQuestionOption[]
+  answers PaperAnswer[]
+
+  @@index([paper_id])
+}
+
+model ExamQuestionOption {
+  id            Int     @id @default(autoincrement())
+  question_id   Int
+  option_text   String
+  is_correct    Boolean @default(false)
+  display_order Int
+
+  question ExamQuestion @relation(fields: [question_id], references: [id])
+
+  // Back-relation for PaperAnswerOption
+  selectedInAnswers PaperAnswerOption[]
+
+  @@index([question_id])
+}
+
+model PaperAttempt {
+  id             Int           @id @default(autoincrement())
+  paper_id       Int
+  student_id     Int
+  status         AttemptStatus // NOT_STARTED, IN_PROGRESS, SUBMITTED, AUTO_SUBMITTED, LOCKED
+  started_at     DateTime?
+  submitted_at   DateTime?
+  auto_closed_at DateTime?
+  created_at     DateTime      @default(now())
+
+  paper   ExamPaper     @relation(fields: [paper_id], references: [id])
+  student Student       @relation(fields: [student_id], references: [id])
+  answers PaperAnswer[]
+
+  @@unique([paper_id, student_id])
+  @@index([paper_id, status])
+  @@index([student_id])
+}
+
+model PaperAnswer {
+  id                 Int      @id @default(autoincrement())
+  attempt_id         Int
+  question_id        Int
+  descriptive_answer String?
+  // removed selected_option_id
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  attempt    PaperAttempt      @relation(fields: [attempt_id], references: [id])
+  question   ExamQuestion      @relation(fields: [question_id], references: [id])
+  evaluation AnswerEvaluation?
+
+  selectedOptions PaperAnswerOption[]
+
+  @@unique([attempt_id, question_id])
+  @@index([attempt_id])
+  @@index([question_id])
+}
+
+model PaperAnswerOption {
+  id        Int @id @default(autoincrement())
+  answer_id Int
+  option_id Int
+
+  answer PaperAnswer        @relation(fields: [answer_id], references: [id])
+  option ExamQuestionOption @relation(fields: [option_id], references: [id])
+
+  @@unique([answer_id, option_id])
+  @@index([answer_id])
+  @@index([option_id])
+}
+
+model AnswerEvaluation {
+  id            Int      @id @default(autoincrement())
+  answer_id     Int      @unique
+  teacher_id    Int
+  marks_awarded Float
+  feedback      String?
+  reviewed_at   DateTime @default(now())
+
+  answer  PaperAnswer @relation(fields: [answer_id], references: [id])
+  teacher Teacher     @relation(fields: [teacher_id], references: [id])
+
+  @@index([teacher_id])
+}
+
+model PaperPassingRule {
+  id              Int      @id @default(autoincrement()) // Added ID
+  paper_id        Int      @unique
+  pass_percentage Float
+  created_at      DateTime @default(now())
+
+  paper ExamPaper @relation(fields: [paper_id], references: [id])
+}
+
+model ExamPassingRule {
+  id                      Int      @id @default(autoincrement()) // Added ID
+  exam_id                 Int      @unique
+  overall_pass_percentage Float
+  must_pass_all_papers    Boolean
+  created_at              DateTime @default(now())
+
+  exam Exam @relation(fields: [exam_id], references: [id])
+}
+
+model GradingScheme {
+  id         Int      @id @default(autoincrement())
+  name       String
+  is_active  Boolean  @default(true)
+  created_by Int?
+  created_at DateTime @default(now())
+
+  rules GradingRule[]
+  exams Exam[]
+}
+
+model GradingRule {
+  id          Int         @id @default(autoincrement())
+  scheme_id   Int
+  grade       GradeLetter // A, B, C, D, E, F
+  min_percent Float
+  max_percent Float
+  order_index Int
+
+  scheme GradingScheme @relation(fields: [scheme_id], references: [id])
+
+  @@unique([scheme_id, grade])
+}
+
+model PaperResult {
+  id             Int      @id @default(autoincrement())
+  paper_id       Int
+  student_id     Int
+  marks_obtained Float
+  percentage     Float
+  pass           Boolean
+  computed_at    DateTime @default(now())
+
+  entry_mode            ResultEntryMode @default(ONLINE_EVALUATED)
+  entered_by_teacher_id Int?
+  updated_at            DateTime        @updatedAt
+
+  paper   ExamPaper @relation(fields: [paper_id], references: [id])
+  student Student   @relation(fields: [student_id], references: [id])
+
+  @@unique([paper_id, student_id])
+  @@index([paper_id])
+  @@index([student_id])
+}
+
+enum ExamMode {
+  ONLINE
+  OFFLINE
+}
+
+enum ResultEntryMode {
+  ONLINE_EVALUATED
+  OFFLINE_MANUAL
+}
+
+model ExamAggregateResult {
+  id                   Int         @id @default(autoincrement())
+  exam_id              Int
+  student_id           Int
+  total_marks_obtained Float
+  total_marks_max      Float
+  percentage           Float
+  grade                GradeLetter
+  pass                 Boolean
+  rank_in_batch        Int?
+  is_complete          Boolean
+  computed_at          DateTime    @default(now())
+
+  exam    Exam    @relation(fields: [exam_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@unique([exam_id, student_id])
+  @@index([exam_id, rank_in_batch])
+  @@index([student_id])
+}
+
+model ExamPublish {
+  id           Int      @id @default(autoincrement()) // Added ID
+  exam_id      Int      @unique
+  published_by Int?
+  published_at DateTime @default(now())
+
+  exam Exam @relation(fields: [exam_id], references: [id])
+}
+
+// ============================================
+// BROADCAST & ALERTS SYSTEM
+// ============================================
+
+model Broadcast {
+  id                Int       @id @default(autoincrement())
+  name              String // Internal name for admin reference
+  template_id       String // WhatsApp template ID
+  template_name     String // WhatsApp template name
+  template_language String    @default("en")
+  template_params   Json // Dynamic variables as JSON
+  total_recipients  Int
+  status            String // 'pending', 'processing', 'completed', 'cancelled', 'failed'
+  created_by        Int
+  created_at        DateTime  @default(now())
+  completed_at      DateTime?
+
+  messages BroadcastMessage[]
+
+  @@index([created_by])
+  @@index([status])
+  @@index([created_at])
+}
+
+model BroadcastMessage {
+  id                  Int       @id @default(autoincrement())
+  broadcast_id        Int
+  student_id          Int
+  phone_number        String
+  template_id         String
+  template_name       String
+  template_language   String
+  template_params     Json // Resolved variables for this specific message
+  status              String // 'pending', 'sending', 'sent', 'delivered', 'read', 'failed', 'cancelled'
+  provider_message_id String? // External provider's message ID
+  error_message       String?
+  retry_count         Int       @default(0)
+  max_retries         Int       @default(3)
+  sent_at             DateTime?
+  delivered_at        DateTime?
+  read_at             DateTime?
+  failed_at           DateTime?
+  created_at          DateTime  @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcast_id], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [student_id], references: [id])
+
+  @@unique([broadcast_id, student_id]) // Prevent duplicate messages
+  @@index([broadcast_id, status]) // Critical for polling pending messages
+  @@index([status, created_at]) // For processing order
+  @@index([provider_message_id]) // For webhook lookups
+}
+
+model WhatsAppTemplate {
+  id          Int      @id @default(autoincrement())
+  template_id String   @unique // Provider's template ID
+  name        String
+  language    String
+  status      String // 'approved', 'pending', 'rejected'
+  category    String // 'marketing', 'utility', 'authentication'
+  components  Json // Template structure (header, body, footer, buttons)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([status])
+  @@index([language])
+}
+
+model StudentExamAccessToken {
+  id         Int      @id @default(autoincrement())
+  paper_id   Int
+  student_id Int
+  token_hash String
+  expires_at DateTime
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  // Relations
+  paper   ExamPaper @relation(fields: [paper_id], references: [id])
+  student Student   @relation(fields: [student_id], references: [id])
+
+  @@unique([paper_id, student_id])
+  @@index([token_hash])
+}
+
+model ReportCardTemplate {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique // e.g., "CBSE_V1"
+  display_name String // e.g., "CBSE Report Card"
+  description  String?
+  is_active    Boolean  @default(true)
+  config_json  Json? // optional for future flexible settings (grading labels, fields toggles, etc.)
+  created_by   Int?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  batch_configs BatchReportCardTemplateConfig[]
+}
+
+model BatchReportCardTemplateConfig {
+  id               Int      @id @default(autoincrement())
+  batch_id         Int
+  academic_session String // "2024-25"
+  template_id      Int
+  is_active        Boolean  @default(true)
+  created_by       Int?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  batch    CourseBatch        @relation(fields: [batch_id], references: [id])
+  template ReportCardTemplate @relation(fields: [template_id], references: [id])
+
+  @@unique([batch_id, academic_session]) // exactly one template config per batch+session
+  @@index([template_id])
+  @@index([batch_id, academic_session])
+}
