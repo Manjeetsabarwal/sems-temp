@@ -192,9 +192,41 @@ export async function apiCall<T>(
   url: string,
   options: RequestInit = {},
 ): Promise<T> {
+
+  const token = localStorage.getItem('access_token');
+
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`;
+    try {
+      const err = await response.json();
+      errorMessage = err.message || errorMessage;
+    } catch {}
+    throw new Error(errorMessage);
+  }
+
+  // 👇 keep this (important)
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json();
+}
 
   // Add auth token if available
   const token = localStorage.getItem('access_token');
